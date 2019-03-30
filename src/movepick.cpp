@@ -36,7 +36,7 @@ namespace {
   void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
 
     for (ExtMove *sortedEnd = begin, *p = begin + 1; p < end; ++p)
-        // if (p->value >= limit)
+        if (p->value >= limit)
         {
             ExtMove tmp = *p, *q;
             *p = *++sortedEnd;

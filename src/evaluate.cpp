@@ -714,7 +714,7 @@ namespace {
                             && (pos.pieces(PAWN) & KingSide);
 
     bool almostUnwinnable = (pos.this_thread()->ttHitAverage > 544UL * 1024UL * 4096UL / 1024UL) ||
-                            (outflanking < 0 && !pe->passed_count() && !pawnsOnBothFlanks));
+                            (outflanking < 0 && !pe->passed_count() && !pawnsOnBothFlanks);
 
     // Compute the initiative bonus for the attacking side
     int complexity =   9 * pe->passed_count()

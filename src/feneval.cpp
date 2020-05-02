@@ -1,9 +1,18 @@
 /*
+ * feneval.cpp
+ * 
+ * I don't think there's anything original here at all lol
+ * 
+ */
+
+/*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
   Copyright (C) 2015-2020 Marco Costalba, Joona Kiiski, Gary Linscott, Tord
   Romstad
+
+  (Additionally, I've added a ton of code from Ethereal, which is by Andrew Grant)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,68 +28,130 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <istream>
+#include <math.h>
 #include <vector>
 
 #include "position.h"
 #include "thread.h"
+#include "feneval.h"
+#include "evaluate.h"
 
 using namespace std;
 
-/// setup_bench() builds a list of UCI commands to be run by bench. There
-/// are five parameters: TT size in MB, number of search threads that
-/// should be used, the limit value spent for each position, a file name
-/// where to look for positions in FEN format and the type of the limit:
-/// depth, perft, nodes and movetime (in millisecs).
-///
-/// bench -> search default positions up to depth 13
-/// bench 64 1 15 -> search default positions up to depth 15 (TT = 64MB)
-/// bench 64 4 5000 current movetime -> search current position with 4 threads
-/// for 5 sec bench 64 1 100000 default nodes -> search default positions for
-/// 100K nodes each bench 16 1 5 default perft -> run a perft 5 on default
-/// positions
+// Written by Andrew Grant
+double sigmoid(double K, double S) {
+    return 1.0 / (1.0 + exp(-K * S / 400.0));
+}
 
-vector<string> get_fenfile_mse(
+// Written by Andrew Grant
+static double completeEvaluationError(FenData* data, double K)
+{
+
+    double total = 0.0;
+
+    for (int i = 0; i < NPOSITIONS; i++) {
+        total += pow(data[i].result - sigmoid(K, data[i].eval), 2);
+    }
+
+    return total / (double)NPOSITIONS;
+}
+
+// Written by Andrew Grant
+static double computeOptimalK(FenData* data)
+{
+
+    double start = -10.0, end = 10.0, delta = 1.0;
+    double curr = start, error, best = completeEvaluationError(data, start);
+
+    for (int i = 0; i < KPRECISION; i++) {
+
+        curr = start - delta;
+        while (curr < end) {
+            curr  = curr + delta;
+            error = completeEvaluationError(data, curr);
+            if (error <= best)
+                best = error, start = curr;
+        }
+
+        printf("COMPUTING K ITERATION [%d] K = %f E = %f\n", i, start, best);
+
+        end   = start + delta;
+        start = start - delta;
+        delta = delta / 10.0;
+    }
+
+    return start;
+}
+
+void get_fenfile_mse(
     Position& current, istream& is, StateListPtr& states)
 {
 
-    vector<string> fens, list;
-    string         go, token;
+    vector<FenData> fens;
+    // string          token;
 
     // Assign default values to missing arguments
-    string ttSize    = (is >> token) ? token : "16";
-    string threads   = (is >> token) ? token : "1";
-    string limit     = (is >> token) ? token : "13";
-    string fenFile   = (is >> token) ? token : "default";
-    string limitType = (is >> token) ? token : "depth";
-
-    go = limitType == "eval" ? "eval" : "go " + limitType + " " + limit;
+    // string ttSize    = (is >> token) ? token : "16";
+    // string threads   = (is >> token) ? token : "1";
+    // string limit     = (is >> token) ? token : "13";
+    // string limitType = (is >> token) ? token : "depth";
 
     {
         string   fen;
-        ifstream file(fenFile);
+        ifstream file(FILENAME);
 
         if (!file.is_open()) {
-            cerr << "Unable to open file " << fenFile << endl;
+            cerr << "Unable to open file " << FILENAME << endl;
             exit(EXIT_FAILURE);
         }
 
-        while (getline(file, fen))
-            if (!fen.empty())
-                fens.push_back(fen);
+        int i = 0;
+        while (getline(file, fen) && ++i < NPOSITIONS) {
+            FenData data;
+            
+            data.fen = fen;
+
+            // Written by Andrew Grant
+            data.eval  = atoi(strstr(fen.c_str(), "] ") + 2);
+
+            if (strstr(fen.c_str(), " b "))
+                data.eval *= -1;
+
+            // Determine the result of the game
+            if (strstr(fen.c_str(), "[1.0]")) {
+                data.result = 1.0;
+            } else if (strstr(fen.c_str(), "[0.5]")) {
+                data.result = 0.5;
+            } else if (strstr(fen.c_str(), "[0.0]")) {
+                data.result = 0.0;
+            } else {
+                printf("Cannot Parse %s\n", fen.c_str());
+                exit(EXIT_FAILURE);
+            }
+
+            if (!fen.empty()) {
+                fens.push_back(data);
+            }
+        }
 
         file.close();
     }
 
-    list.emplace_back("setoption name Threads value " + threads);
-    list.emplace_back("setoption name Hash value " + ttSize);
-    list.emplace_back("ucinewgame");
+    computeOptimalK(&fens[0]);
 
-    for (const string& fen : fens) {
-        current.set(fen, false, &states->back(), Threads.main());
+    for (const FenData& data : fens) {
+        current.set(data.fen, false, &states->back(), Threads.main());
+        
+        current.this_thread()->contempt = SCORE_ZERO;  // perhaps suboptimal
+
+        auto eval = Eval::evaluate(current);
+        printf("Cached eval: %f\tResult: %f\tSF eval: %d\n", 
+            data.eval, data.result, eval
+        );
     }
-
-    return list;
 }

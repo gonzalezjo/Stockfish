@@ -338,13 +338,13 @@ endif
 ifeq ($(optimize),yes)
 ifeq ($(debug), no)
 	ifeq ($(comp),$(filter $(comp),gcc clang))
-		CXXFLAGS += -flto
+		# CXXFLAGS += -flto
 		LDFLAGS += $(CXXFLAGS)
 	endif
 
 	ifeq ($(comp),mingw)
 	ifeq ($(KERNEL),Linux)
-		CXXFLAGS += -flto
+		# CXXFLAGS += -flto
 		LDFLAGS += $(CXXFLAGS)
 	endif
 	endif

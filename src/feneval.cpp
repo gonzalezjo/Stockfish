@@ -36,6 +36,8 @@
 #include <math.h>
 #include <vector>
 
+#include "search.h"
+#include "types.h"
 #include "position.h"
 #include "thread.h"
 #include "feneval.h"
@@ -119,8 +121,9 @@ void get_fenfile_mse(
             // Written by Andrew Grant
             data.eval  = atoi(strstr(fen.c_str(), "] ") + 2);
 
-            if (strstr(fen.c_str(), " b "))
-                data.eval *= -1;
+            // if (strstr(fen.c_str(), " b ")) {
+                // data.eval *= -1;
+            // }
 
             // Determine the result of the game
             if (strstr(fen.c_str(), "[1.0]")) {
@@ -142,16 +145,25 @@ void get_fenfile_mse(
         file.close();
     }
 
-    computeOptimalK(&fens[0]);
+    double K = computeOptimalK(&fens[0]);
 
-    for (const FenData& data : fens) {
-        current.set(data.fen, false, &states->back(), Threads.main());
-        
-        current.this_thread()->contempt = SCORE_ZERO;  // perhaps suboptimal
+    while (true) {
+        printf("error: %f\n", completeEvaluationError(&fens[0], K));
+        for (FenData& data : fens) {
+            Search::Stack stack[MAX_PLY + 10], *ss = stack + 7;
+            
+            current.set(data.fen, false, &states->back(), Threads.main());
+            current.this_thread()->contempt = SCORE_ZERO; // perhaps suboptimal
+            auto eval                       = Eval::evaluate(current);
 
-        auto eval = Eval::evaluate(current);
-        printf("Cached eval: %f\tResult: %f\tSF eval: %d\n", 
-            data.eval, data.result, eval
-        );
+            // auto eval = Search::qsearch<Search::NonPV>(current, ss, -VALUE_MATE, VALUE_MATE);
+
+            // printf("%f\n", data.eval);
+            data.eval = eval;
+
+            // printf("Cached eval: %f\tResult: %f\tSF eval: %d\n", 
+            //     data.eval, data.result, eval
+            // );
+        }
     }
 }

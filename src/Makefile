@@ -89,9 +89,9 @@ endif
 # at the end of the line for flag values.
 
 ### 2.1. General and architecture defaults
-optimize = yes
-debug = no
-sanitize = no
+optimize = no
+debug = yes
+sanitize = thread
 bits = 32
 prefetch = no
 popcnt = no
@@ -177,7 +177,7 @@ endif
 ifeq ($(COMP),gcc)
 	comp=gcc
 	CXX=g++
-	CXXFLAGS += -pedantic -Wextra -Wshadow
+	CXXFLAGS += -Wextra -Wshadow
 
 	ifeq ($(ARCH),armv7)
 		ifeq ($(OS),Android)
@@ -218,7 +218,7 @@ ifeq ($(COMP),mingw)
 	CXXFLAGS += -Wextra -Wshadow
 	LDFLAGS += -static
 endif
-LDFLAGS += -static
+# LDFLAGS += -static
 
 ifeq ($(COMP),icc)
 	comp=icc
@@ -556,16 +556,16 @@ icc-profile-use:
 	all
 
 nnue: config-sanity
-	$(MAKE) CXXFLAGS='$(CXXFLAGS) -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
+	$(MAKE) CXXFLAGS='$(CXXFLAGS) -mavx2 -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
 
 nnue-gen-sfen-from-original-eval: config-sanity
-	$(MAKE) CXXFLAGS='$(CXXFLAGS) -DEVAL_LEARN -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
+	$(MAKE) CXXFLAGS='$(CXXFLAGS) -mavx2 -DEVAL_LEARN -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
 
 nnue-learn: config-sanity
-	$(MAKE) CXXFLAGS='$(CXXFLAGS) -DEVAL_LEARN -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
+	$(MAKE) CXXFLAGS='$(CXXFLAGS) -mavx2 -DEVAL_LEARN -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -fopenmp' LDFLAGS='$(LDFLAGS) -fopenmp' build
 
 nnue-learn-use-blas: config-sanity
-	$(MAKE) CXXFLAGS='$(CXXFLAGS) -DEVAL_LEARN -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -DUSE_BLAS -I/mingw64/include/OpenBLAS -fopenmp' LDFLAGS='$(LDFLAGS) -lopenblas -fopenmp' build
+	$(MAKE) CXXFLAGS='$(CXXFLAGS) -mavx2 -DEVAL_LEARN -DEVAL_NNUE -DUSE_EVAL_HASH -DUSE_AVX2 -DUSE_SSE2 -DENABLE_TEST_CMD -DUSE_BLAS -I/mingw64/include/OpenBLAS -fopenmp' LDFLAGS='$(LDFLAGS) -lopenblas -fopenmp' build
 
 .depend:
 	-@$(CXX) $(DEPENDFLAGS) -MM $(OBJS:.o=.cpp) > $@ 2> /dev/null

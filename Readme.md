@@ -6,7 +6,7 @@ a few include files and some config flags to build in debug mode and to use
 thread sanitize because otherwise it crashes in notifying on a conditional
 variable. Here is what I used to build it:
 
-  make nnue ARCH=x86-64
+  `make nnue ARCH=x86-64`
 
 and to run it I downloaded this net from talkchess:
 
@@ -14,19 +14,23 @@ and to run it I downloaded this net from talkchess:
 
 to get it to actually run you invoke stockfish as usual and then you must
 
+```
   setoption name EvalDir value /path/to/dir/containing/your/nn.bin
   setoption name SkipLoadingEval value true
   isready
   go infinite
+```
 
 and you should see the result of the SFNNUE output. Currently, there is
 something wrong because I see this:
 
+```
   info depth 1 seldepth 1 multipv 1 score cp 0 nodes 20 nps 526 tbhits 0 time 38 pv a2a3
   info depth 2 seldepth 2 multipv 1 score cp 0 nodes 61 nps 1016 tbhits 0 time 60 pv a2a3 a7a6
   info depth 3 seldepth 3 multipv 1 score cp 0 nodes 114 nps 1200 tbhits 0 time 95 pv a2a3 a7a6 a3a4
   info depth 4 seldepth 4 multipv 1 score cp 0 nodes 242 nps 1792 tbhits 0 time 135 pv a2a3 a7a6 a3a4 a6a5
   info depth 5 seldepth 5 multipv 1 score cp 0 nodes 480 nps 2330 tbhits 0 time 206 pv a2a3 a7a6 a3a4 a6a5 a1a3
+```
 
 ---
 

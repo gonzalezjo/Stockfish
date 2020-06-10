@@ -91,12 +91,12 @@ endif
 ### 2.1. General and architecture defaults
 optimize = yes
 debug = no
-sanitize = thread
+sanitize = no
 bits = 32
 prefetch = no
 popcnt = no
 sse = no
-pext = no
+pext = yes
 
 ### 2.2 Architecture specific
 

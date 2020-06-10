@@ -89,8 +89,8 @@ endif
 # at the end of the line for flag values.
 
 ### 2.1. General and architecture defaults
-optimize = no
-debug = yes
+optimize = yes
+debug = no
 sanitize = thread
 bits = 32
 prefetch = no

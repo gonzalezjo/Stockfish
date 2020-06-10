@@ -15,7 +15,11 @@
 
 #if defined(EVAL_LEARN)
 
+#if defined(__GNUG__)
+#include <experimental/filesystem>
+#else
 #include <filesystem>
+#endif
 #include <random>
 
 #include "learn.h"

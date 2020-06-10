@@ -6,7 +6,7 @@ a few include files and some config flags to build in debug mode and to use
 thread sanitize because otherwise it crashes in notifying on a conditional
 variable. Here is what I used to build it:
 
-  `make nnue ARCH=x86-64`
+  `make nnue ARCH=x86-64-bmi2`
 
 and to run it I downloaded this net from talkchess:
 
@@ -20,17 +20,21 @@ to get it to actually run you invoke stockfish as usual and then you must
   go infinite
 ```
 
-and you should see the result of the SFNNUE output:
+and you should see the result of the SFNNUE output. I am getting around 3.2Mnps with 12 threads:
 
 ```
-info depth 1 seldepth 1 multipv 1 score cp 36 nodes 20 nps 666 tbhits 0 time 30 pv d2d4
-info depth 2 seldepth 2 multipv 1 score cp 145 nodes 46 nps 1121 tbhits 0 time 41 pv g1f3 b7b6
-info depth 3 seldepth 3 multipv 1 score cp 87 nodes 94 nps 1566 tbhits 0 time 60 pv g1f3 b7b6 d2d4
-info depth 4 seldepth 4 multipv 1 score cp 161 nodes 135 nps 1849 tbhits 0 time 73 pv g1f3 b7b6 d2d4
-info depth 5 seldepth 6 multipv 1 score cp 71 nodes 534 nps 2781 tbhits 0 time 192 pv e2e4 d7d5 e4d5 d8d5 d2d4
-info depth 6 seldepth 6 multipv 1 score cp 75 nodes 596 nps 2865 tbhits 0 time 208 pv e2e4 d7d5 e4d5 d8d5 d2d4 d5e4 c1e3
-info depth 7 seldepth 8 multipv 1 score cp 73 nodes 1644 nps 3055 tbhits 0 time 538 pv e2e4 b8c6 g1f3 g8f6 e4e5 f6e4
-info depth 8 seldepth 10 multipv 1 score cp 7 nodes 7212 nps 3130 hashfull 1 tbhits 0 time 2304 pv e2e4 b8c6 h2h4 c6d4 b1c3 g8f6 c3d5 f6e4
+info depth 1 seldepth 1 multipv 1 score cp 36 nodes 90 nps 30000 tbhits 0 time 3 pv d2d4
+info depth 2 seldepth 2 multipv 1 score cp 145 nodes 395 nps 131666 tbhits 0 time 3 pv g1f3 b7b6
+info depth 3 seldepth 3 multipv 1 score cp 87 nodes 688 nps 172000 tbhits 0 time 4 pv g1f3 b7b6 d2d4
+info depth 4 seldepth 4 multipv 1 score cp 172 nodes 1075 nps 268750 tbhits 0 time 4 pv g1f3 b7b6
+info depth 5 seldepth 5 multipv 1 score cp 41 nodes 4312 nps 718666 tbhits 0 time 6 pv e2e4 g8f6 g1f3 f6e4 d2d4
+info depth 6 seldepth 6 multipv 1 score cp 63 nodes 4954 nps 707714 tbhits 0 time 7 pv e2e4 c7c5 e4e5 b8c6 g1f3
+info depth 7 seldepth 9 multipv 1 score cp 33 nodes 25459 nps 1106913 tbhits 0 time 23 pv e2e4 c7c5 d2d4 c5d4 f1b5 b8c6 b1d2
+info depth 8 seldepth 12 multipv 1 score cp 0 nodes 43871 nps 1415193 tbhits 0 time 31 pv e2e4 c7c5 e4e5 b8c6 g1f3 d7d5 f1b5 d5d4 f3g5 e7e6
+info depth 9 seldepth 14 multipv 1 score cp 16 nodes 63583 nps 1718459 tbhits 0 time 37 pv e2e4 c7c5 e4e5 b8c6 g1f3 g8f6 b1c3 d7d5
+info depth 10 seldepth 14 multipv 1 score cp 2 nodes 233778 nps 2513741 tbhits 0 time 93 pv e2e4 e7e5 g1f3 b8c6 f1c4 g8f6 e1g1 f8c5 d2d3 d7d6 b1c3 c8g4
+info depth 11 seldepth 20 multipv 1 score cp 0 nodes 370304 nps 2683362 tbhits 0 time 138 pv e2e4 e7e5 g1f3 f8c5 f1e2 b8c6 e1g1 g8f6 d2d3 d7d5 e4d5 f6d5
+info depth 12 seldepth 20 multipv 1 score cp 13 nodes 595446 nps 3150507 tbhits 0 time 189 pv e2e4 e7e5 g1f3 d7d5 e4d5 e5e4 f1c4 c7c6 e1g1 c6d5 b1c3 e4f3 c4d5
 ```
 
 ---

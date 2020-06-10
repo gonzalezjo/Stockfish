@@ -16,20 +16,21 @@ to get it to actually run you invoke stockfish as usual and then you must
 
 ```
   setoption name EvalDir value /path/to/dir/containing/your/nn.bin
-  setoption name SkipLoadingEval value true
   isready
   go infinite
 ```
 
-and you should see the result of the SFNNUE output. Currently, there is
-something wrong because I see this:
+and you should see the result of the SFNNUE output:
 
 ```
-  info depth 1 seldepth 1 multipv 1 score cp 0 nodes 20 nps 526 tbhits 0 time 38 pv a2a3
-  info depth 2 seldepth 2 multipv 1 score cp 0 nodes 61 nps 1016 tbhits 0 time 60 pv a2a3 a7a6
-  info depth 3 seldepth 3 multipv 1 score cp 0 nodes 114 nps 1200 tbhits 0 time 95 pv a2a3 a7a6 a3a4
-  info depth 4 seldepth 4 multipv 1 score cp 0 nodes 242 nps 1792 tbhits 0 time 135 pv a2a3 a7a6 a3a4 a6a5
-  info depth 5 seldepth 5 multipv 1 score cp 0 nodes 480 nps 2330 tbhits 0 time 206 pv a2a3 a7a6 a3a4 a6a5 a1a3
+info depth 1 seldepth 1 multipv 1 score cp 36 nodes 20 nps 666 tbhits 0 time 30 pv d2d4
+info depth 2 seldepth 2 multipv 1 score cp 145 nodes 46 nps 1121 tbhits 0 time 41 pv g1f3 b7b6
+info depth 3 seldepth 3 multipv 1 score cp 87 nodes 94 nps 1566 tbhits 0 time 60 pv g1f3 b7b6 d2d4
+info depth 4 seldepth 4 multipv 1 score cp 161 nodes 135 nps 1849 tbhits 0 time 73 pv g1f3 b7b6 d2d4
+info depth 5 seldepth 6 multipv 1 score cp 71 nodes 534 nps 2781 tbhits 0 time 192 pv e2e4 d7d5 e4d5 d8d5 d2d4
+info depth 6 seldepth 6 multipv 1 score cp 75 nodes 596 nps 2865 tbhits 0 time 208 pv e2e4 d7d5 e4d5 d8d5 d2d4 d5e4 c1e3
+info depth 7 seldepth 8 multipv 1 score cp 73 nodes 1644 nps 3055 tbhits 0 time 538 pv e2e4 b8c6 g1f3 g8f6 e4e5 f6e4
+info depth 8 seldepth 10 multipv 1 score cp 7 nodes 7212 nps 3130 hashfull 1 tbhits 0 time 2304 pv e2e4 b8c6 h2h4 c6d4 b1c3 g8f6 c3d5 f6e4
 ```
 
 ---

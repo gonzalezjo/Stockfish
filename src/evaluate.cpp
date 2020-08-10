@@ -948,7 +948,7 @@ Value Eval::evaluate(const Position& pos) {
       if (abs(v) < NNUEThreshold) 
       {
          const auto eval = (NNUE::evaluate(pos) + Tempo);
-         if (pos.rule50_count() > 64) 
+         if (pos.rule50_count() > 34) 
          {
             return eval * (100 - pos.rule50_count()) / 100;
          }

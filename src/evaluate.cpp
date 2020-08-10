@@ -940,13 +940,19 @@ make_v:
 /// evaluation of the position from the point of view of the side to move.
 
 Value Eval::evaluate(const Position& pos) {
-
   if (Eval::useNNUE)
   {
-      Value v = eg_value(pos.psq_score());
-      // Take NNUE eval only on balanced positions
-      if (abs(v) < NNUEThreshold + 20 * pos.count<PAWN>())
-         return NNUE::evaluate(pos) + Tempo;
+    Value v = eg_value(pos.psq_score());
+    // Take NNUE eval only on balanced positions
+    if (abs(v) < NNUEThreshold + 20 * pos.count<PAWN>())
+    {
+      auto const eval = NNUE::evaluate(pos) + Tempo;
+      if (pos.rule50_count() > 40)
+      { 
+        return eval * (100 - pos.rule50_count()) / 100;
+      }
+      return eval;
+    }
   }
   return Evaluation<NO_TRACE>(pos).value();
 }

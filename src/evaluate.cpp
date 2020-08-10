@@ -946,12 +946,7 @@ Value Eval::evaluate(const Position& pos) {
     // Take NNUE eval only on balanced positions
     if (abs(v) < NNUEThreshold + 20 * pos.count<PAWN>())
     {
-      auto const eval = NNUE::evaluate(pos) + Tempo;
-      if (pos.rule50_count() > 40)
-      { 
-        return eval * (100 - pos.rule50_count()) / 100;
-      }
-      return eval;
+      return (NNUE::evaluate(pos) + Tempo) * (100 - pos.rule50_count()) / 100;
     }
   }
   return Evaluation<NO_TRACE>(pos).value();

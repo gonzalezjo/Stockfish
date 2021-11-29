@@ -870,8 +870,8 @@ namespace {
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
             // Don't bother with verification search if we're in time trouble.
-            // if (thisThread->inTimeTrouble)
-            //     return nullValue;
+            if (thisThread->inTimeTrouble)
+                return nullValue;
 
             // Do verification search at high depths, with null move pruning disabled
             // for us, until ply exceeds nmpMinPly.
@@ -1076,7 +1076,7 @@ moves_loop: // When in check, search starts here
               // Continuation history based pruning (~20 Elo)
               if (   lmrDepth < 5
                   && history < -3000 * depth + 3000
-                  && !thisThread->inTimeTrouble)
+                  /* && !thisThread->inTimeTrouble */)
                   continue;
 
               history += thisThread->mainHistory[us][from_to(move)];                  
@@ -1592,7 +1592,7 @@ moves_loop: // When in check, search starts here
 
       // Continuation history based pruning
       if (  !captureOrPromotion
-          && !thisThread->inTimeTrouble
+        //   && !thisThread->inTimeTrouble
           && bestValue > VALUE_TB_LOSS_IN_MAX_PLY
           && (*contHist[0])[pos.moved_piece(move)][to_sq(move)] < CounterMovePruneThreshold
           && (*contHist[1])[pos.moved_piece(move)][to_sq(move)] < CounterMovePruneThreshold)

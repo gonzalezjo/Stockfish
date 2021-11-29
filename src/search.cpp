@@ -284,6 +284,7 @@ void Thread::search() {
   // The former is needed to allow update_continuation_histories(ss-1, ...),
   // which accesses its argument at ss-6, also near the root.
   // The latter is needed for statScore and killer initialization.
+  const double TIME_TROUBLE_THRESHOLD = 250;
   Stack stack[MAX_PLY+10], *ss = stack+7;
   Move  pv[MAX_PLY+1];
   Value alpha, beta, delta;
@@ -396,6 +397,7 @@ void Thread::search() {
           // Start with a small aspiration window and, in the case of a fail
           // high/low, re-search with a bigger window until we don't fail
           // high/low anymore.
+          // If in time trouble, then don't bother.
           int failedHighCnt = 0;
           while (true)
           {
@@ -437,6 +439,9 @@ void Thread::search() {
               }
               else if (bestValue >= beta)
               {
+                  if (inTimeTrouble)
+                      break;
+
                   beta = std::min(bestValue + delta, VALUE_INFINITE);
                   ++failedHighCnt;
               }
@@ -505,6 +510,11 @@ void Thread::search() {
           if (rootMoves.size() == 1)
               totalTime = std::min(500.0, totalTime);
 
+          for (Thread *th : Threads)
+          {
+              th->inTimeTrouble = totalTime < TIME_TROUBLE_THRESHOLD;
+          }
+          
           // Stop the search if we have exceeded the totalTime
           if (Time.elapsed() > totalTime)
           {
@@ -859,11 +869,15 @@ namespace {
 
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
+            // Don't bother with verification search if we're in time trouble.
+            if (thisThread->inTimeTrouble)
+                return nullValue;
+
             // Do verification search at high depths, with null move pruning disabled
             // for us, until ply exceeds nmpMinPly.
             thisThread->nmpMinPly = ss->ply + 3 * (depth-R) / 4;
             thisThread->nmpColor = us;
-
+            
             Value v = search<NonPV>(pos, ss, beta-1, beta, depth-R, false);
 
             thisThread->nmpMinPly = 0;
@@ -1044,6 +1058,7 @@ moves_loop: // When in check, search starts here
           {
               // Capture history based pruning when the move doesn't give check
               if (   !givesCheck
+                  && !thisThread->inTimeTrouble
                   && lmrDepth < 1
                   && captureHistory[movedPiece][to_sq(move)][type_of(pos.piece_on(to_sq(move)))] < 0)
                   continue;
@@ -1060,7 +1075,8 @@ moves_loop: // When in check, search starts here
 
               // Continuation history based pruning (~20 Elo)
               if (   lmrDepth < 5
-                  && history < -3000 * depth + 3000)
+                  && history < -3000 * depth + 3000
+                  && !thisThread->inTimeTrouble)
                   continue;
 
               history += thisThread->mainHistory[us][from_to(move)];                  

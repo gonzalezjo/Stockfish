@@ -439,8 +439,8 @@ void Thread::search() {
               }
               else if (bestValue >= beta)
               {
-                  if (inTimeTrouble)
-                      break;
+                //   if (inTimeTrouble)
+                //       break;
 
                   beta = std::min(bestValue + delta, VALUE_INFINITE);
                   ++failedHighCnt;
@@ -870,8 +870,8 @@ namespace {
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
             // Don't bother with verification search if we're in time trouble.
-            if (thisThread->inTimeTrouble)
-                return nullValue;
+            // if (thisThread->inTimeTrouble)
+            //     return nullValue;
 
             // Do verification search at high depths, with null move pruning disabled
             // for us, until ply exceeds nmpMinPly.
@@ -1058,7 +1058,7 @@ moves_loop: // When in check, search starts here
           {
               // Capture history based pruning when the move doesn't give check
               if (   !givesCheck
-                  && !thisThread->inTimeTrouble
+                //   && !thisThread->inTimeTrouble
                   && lmrDepth < 1
                   && captureHistory[movedPiece][to_sq(move)][type_of(pos.piece_on(to_sq(move)))] < 0)
                   continue;

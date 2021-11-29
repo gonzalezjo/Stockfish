@@ -857,6 +857,9 @@ namespace {
             if (thisThread->nmpMinPly || (abs(beta) < VALUE_KNOWN_WIN && depth < 14))
                 return nullValue;
 
+            if (500 <= abs(beta) || abs(beta) <= 40)
+                return beta;
+
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
             // Do verification search at high depths, with null move pruning disabled

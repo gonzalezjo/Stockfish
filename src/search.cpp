@@ -277,6 +277,8 @@ void MainThread::search() {
 /// Thread::search() is the main iterative deepening loop. It calls search()
 /// repeatedly with increasing depth until the allocated thinking time has been
 /// consumed, the user stops the search, or the maximum search depth is reached.
+int TIME_TROUBLE_THRESHOLD = 0;
+TUNE(SetRange(1, 1000), TIME_TROUBLE_THRESHOLD);
 
 void Thread::search() {
 
@@ -284,7 +286,6 @@ void Thread::search() {
   // The former is needed to allow update_continuation_histories(ss-1, ...),
   // which accesses its argument at ss-6, also near the root.
   // The latter is needed for statScore and killer initialization.
-  const double TIME_TROUBLE_THRESHOLD = 200;
   Stack stack[MAX_PLY+10], *ss = stack+7;
   Move  pv[MAX_PLY+1];
   Value alpha, beta, delta;

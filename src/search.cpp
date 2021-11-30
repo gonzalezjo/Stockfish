@@ -277,7 +277,7 @@ void MainThread::search() {
 /// Thread::search() is the main iterative deepening loop. It calls search()
 /// repeatedly with increasing depth until the allocated thinking time has been
 /// consumed, the user stops the search, or the maximum search depth is reached.
-int TIME_TROUBLE_THRESHOLD = 0;
+int TIME_TROUBLE_THRESHOLD = 200;
 TUNE(SetRange(1, 1000), TIME_TROUBLE_THRESHOLD);
 
 void Thread::search() {

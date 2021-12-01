@@ -380,7 +380,7 @@ void Thread::search() {
           if (rootDepth >= 4)
           {
               Value prev = rootMoves[pvIdx].averageScore;
-              delta = Value(17) + int(prev) * prev / 16384;
+              delta = Value(17 - (Threads[0])->inTimeTrouble) + int(prev) * prev / 16384;
               alpha = std::max(prev - delta,-VALUE_INFINITE);
               beta  = std::min(prev + delta, VALUE_INFINITE);
 
@@ -390,6 +390,7 @@ void Thread::search() {
                                    : -make_score(tr, tr / 2));
 
               int opt = sigmoid(prev, 0, 25, 147, 14464, 256);
+
               optimism[ us] = Value(opt);
               optimism[~us] = -optimism[us];
           }
@@ -447,8 +448,11 @@ void Thread::search() {
               }
               else
                   break;
-
-              delta += delta / 4 + 5;
+              
+              if ((Threads[0])->inTimeTrouble)
+                delta += delta / 5;
+              else
+                delta += delta / 4 + 5;
 
               assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
           }
@@ -514,7 +518,7 @@ void Thread::search() {
           {
               th->inTimeTrouble = totalTime < TIME_TROUBLE_THRESHOLD;
           }
-          
+
           // Stop the search if we have exceeded the totalTime
           if (Time.elapsed() > totalTime)
           {
@@ -870,8 +874,8 @@ namespace {
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
             // Don't bother with verification search if we're in time trouble.
-            if (thisThread->inTimeTrouble)
-                return nullValue;
+            // if (thisThread->inTimeTrouble)
+            //     return nullValue;
 
             // Do verification search at high depths, with null move pruning disabled
             // for us, until ply exceeds nmpMinPly.

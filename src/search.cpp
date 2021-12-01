@@ -337,8 +337,13 @@ void Thread::search() {
   nodesLastNormal    = nodes;
   state              = EXPLOSION_NONE;
   trend              = SCORE_ZERO;
-  optimism[ us]      = Value(25);
-  optimism[~us]      = -optimism[us];
+
+  if (Threads[0]->inTimeTrouble)
+    optimism[us] = Value(-4);
+  else
+    optimism[us] = Value(25);
+
+  optimism[~us] = -optimism[us];
 
   int searchAgainCounter = 0;
 
@@ -390,6 +395,7 @@ void Thread::search() {
                                    : -make_score(tr, tr / 2));
 
               int opt = sigmoid(prev, 0, 25, 147, 14464, 256);
+
               optimism[ us] = Value(opt);
               optimism[~us] = -optimism[us];
           }
@@ -447,7 +453,7 @@ void Thread::search() {
               }
               else
                   break;
-
+              
               delta += delta / 4 + 5;
 
               assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
@@ -514,7 +520,7 @@ void Thread::search() {
           {
               th->inTimeTrouble = totalTime < TIME_TROUBLE_THRESHOLD;
           }
-          
+
           // Stop the search if we have exceeded the totalTime
           if (Time.elapsed() > totalTime)
           {
@@ -870,8 +876,8 @@ namespace {
             assert(!thisThread->nmpMinPly); // Recursive verification is not allowed
 
             // Don't bother with verification search if we're in time trouble.
-            if (thisThread->inTimeTrouble)
-                return nullValue;
+            // if (thisThread->inTimeTrouble)
+            //     return nullValue;
 
             // Do verification search at high depths, with null move pruning disabled
             // for us, until ply exceeds nmpMinPly.

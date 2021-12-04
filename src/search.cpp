@@ -58,6 +58,11 @@ using namespace Search;
 
 namespace {
 
+  int CUTOFF_1 = 70;
+  int CUTOFF_2 = 200;
+  TUNE(CUTOFF_1, SetRange(50, 99));
+  TUNE(CUTOFF_2, SetRange(100,400));
+
   // Different node types, used as a template parameter
   enum NodeType { NonPV, PV, Root };
 
@@ -568,6 +573,10 @@ namespace {
         alpha = value_draw(pos.this_thread());
         if (alpha >= beta)
             return alpha;
+    }
+
+    if (rootNode) {
+        thisThread->rootPieceCount = pos.count<ALL_PIECES>();
     }
 
     // Dive into quiescence search when the depth reaches zero
@@ -1206,6 +1215,10 @@ moves_loop: // When in check, search starts here
 
           // Increase reduction if ttMove is a capture (~3 Elo)
           if (ttCapture)
+              r++;
+
+          // Increase reduction if piece count has dropped significantly
+          if ((thisThread->rootPieceCount - pos.count<ALL_PIECES>()) * 100 >= CUTOFF_1 * ss->ply && abs(ss->staticEval) < CUTOFF_2)
               r++;
 
           ss->statScore =  thisThread->mainHistory[us][from_to(move)]

@@ -570,6 +570,10 @@ namespace {
             return alpha;
     }
 
+    if (rootNode) {
+        thisThread->rootPieceCount = pos.count<ALL_PIECES>();
+    }
+
     // Dive into quiescence search when the depth reaches zero
     if (depth <= 0)
         return qsearch<PvNode ? PV : NonPV>(pos, ss, alpha, beta);
@@ -1207,6 +1211,10 @@ moves_loop: // When in check, search starts here
           // Increase reduction if ttMove is a capture (~3 Elo)
           if (ttCapture)
               r++;
+
+          // Increase reduction if piece count has dropped significantly
+          if ((thisThread->rootPieceCount - pos.count<ALL_PIECES>()) * 100 > 75 * ss->ply)
+            r++;
 
           ss->statScore =  thisThread->mainHistory[us][from_to(move)]
                          + (*contHist[0])[movedPiece][to_sq(move)]

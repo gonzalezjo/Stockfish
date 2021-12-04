@@ -1099,6 +1099,12 @@ Value Eval::evaluate(const Position& pos) {
        Color stm      = pos.side_to_move();
        Value optimism = pos.this_thread()->optimism[stm];
 
+       const int pieceCount = pos.count<ALL_PIECES>();
+
+       if (pieceCount <= 14) {
+           optimism = (optimism * pieceCount) / 16;
+       }
+
        v = (nnue + optimism) * scale / 1024 - optimism;
 
        if (pos.is_chess960())

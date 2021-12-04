@@ -70,6 +70,7 @@ public:
   ExplosionState state;
   Value optimism[COLOR_NB];
 
+  int rootPieceCount = -1;
   Position rootPos;
   StateInfo rootState;
   Search::RootMoves rootMoves;

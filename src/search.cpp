@@ -1204,6 +1204,10 @@ moves_loop: // When in check, search starts here
           if (cutNode && move != ss->killers[0])
               r += 2;
 
+          // Decrease reduction if there's progress
+          if (pos.rule50_count() < 2)
+              r--;
+
           // Increase reduction if ttMove is a capture (~3 Elo)
           if (ttCapture)
               r++;

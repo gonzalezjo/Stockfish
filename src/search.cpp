@@ -56,6 +56,11 @@ using std::string;
 using Eval::evaluate;
 using namespace Search;
 
+int SIMPLIFYING_SCALE_FACTOR = 30;
+int SIMPLIFYING_EVAL_LIMIT = 200;
+TUNE(SetRange(0, 32), SIMPLIFYING_SCALE_FACTOR);
+TUNE(SetRange(100, 400), SIMPLIFYING_EVAL_LIMIT);
+
 namespace {
 
   // Different node types, used as a template parameter
@@ -954,8 +959,8 @@ moves_loop: // When in check, search starts here
 
     int rangeReduction = 0;
     int simplifying = (ss-8)->pieceCount != VALUE_NONE && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) > 4;
-    if (eval > 200 && simplifying)
-        return eval + 100;
+    if (abs(eval) > SIMPLIFYING_EVAL_LIMIT && simplifying)
+        return (eval * SIMPLIFYING_SCALE_FACTOR) / 32;
 
     // Step 11. A small Probcut idea, when we are in check
     probCutBeta = beta + 409;

@@ -953,7 +953,7 @@ namespace {
 moves_loop: // When in check, search starts here
 
     int rangeReduction = 0;
-    int simplifying = (ss-8)->pieceCount != VALUE_NONE && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) > 4;
+    int simplifying = (ss-8)->pieceCount != VALUE_NONE && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) >= 4;
     if (abs(eval) > 200 && simplifying)
         return (eval * 15) / 16;
 

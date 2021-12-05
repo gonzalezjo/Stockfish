@@ -640,6 +640,7 @@ namespace {
     (ss+1)->ttPv         = false;
     (ss+1)->excludedMove = bestMove = MOVE_NONE;
     (ss+2)->killers[0]   = (ss+2)->killers[1] = MOVE_NONE;
+    ss->pieceCount       = pos.count<ALL_PIECES>(us);
     ss->doubleExtensions = (ss-1)->doubleExtensions;
     ss->depth            = depth;
     Square prevSq        = to_sq((ss-1)->currentMove);
@@ -952,6 +953,15 @@ namespace {
 moves_loop: // When in check, search starts here
 
     int rangeReduction = 0;
+
+    if (!rootNode && eval > 200)
+    {
+        int desperation =   (ss-8)->inCheck + (ss-6)->inCheck + (ss-4)->inCheck + (ss-2)->inCheck + ss->inCheck
+                          + (ss-8)->pieceCount - ss->pieceCount;
+
+        if (desperation > 4)
+            return eval; 
+    }
 
     // Step 11. A small Probcut idea, when we are in check
     probCutBeta = beta + 409;

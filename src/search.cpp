@@ -816,6 +816,7 @@ namespace {
                   :                                    200;
 
     improving = improvement > 0;
+    ss->pieceCount = popcount(pos.pieces(pos.side_to_move()));
 
     // Step 7. Futility pruning: child node (~50 Elo).
     // The depth condition is important for mate finding.
@@ -1146,6 +1147,11 @@ moves_loop: // When in check, search starts here
                && move == ttMove
                && move == ss->killers[0]
                && (*contHist[0])[movedPiece][to_sq(move)] >= 10000)
+          extension = 1;
+
+      else if (   (ss-8)->pieceCount != VALUE_NONE
+               && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) > 4
+               && abs(ss->staticEval) > 100)
           extension = 1;
 
       // Add extension to new depth

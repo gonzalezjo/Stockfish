@@ -438,6 +438,10 @@ void Thread::search() {
               }
               else if (bestValue >= beta)
               {
+                  // Re-searching fail highs is expensive and unlikely to be worth it when in time trouble.
+                  if (inTimeTrouble)
+                      break;
+
                   beta = std::min(bestValue + delta, VALUE_INFINITE);
                   ++failedHighCnt;
               }
@@ -506,6 +510,10 @@ void Thread::search() {
           // yielding correct scores and sufficiently fast moves.
           if (rootMoves.size() == 1)
               totalTime = std::min(500.0, totalTime);
+
+          // If time is low, then flag that for use in search.
+          for (Thread* th : Threads)
+              th->inTimeTrouble = totalTime < 450;
 
           // Stop the search if we have exceeded the totalTime
           if (Time.elapsed() > totalTime)

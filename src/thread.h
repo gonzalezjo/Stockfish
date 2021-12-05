@@ -69,6 +69,7 @@ public:
   Color nmpColor;
   ExplosionState state;
   Value optimism[COLOR_NB];
+  bool inTimeTrouble = false;
 
   Position rootPos;
   StateInfo rootState;

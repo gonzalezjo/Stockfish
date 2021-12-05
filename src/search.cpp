@@ -954,8 +954,8 @@ moves_loop: // When in check, search starts here
 
     int rangeReduction = 0;
     int simplifying = (ss-8)->pieceCount != VALUE_NONE && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) > 4;
-    if (eval > 200 && simplifying)
-        return eval + 100;
+    if (eval > 175 && simplifying)
+        return (eval * 3) / 4;
 
     // Step 11. A small Probcut idea, when we are in check
     probCutBeta = beta + 409;

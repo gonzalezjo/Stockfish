@@ -954,7 +954,7 @@ moves_loop: // When in check, search starts here
 
     int rangeReduction = 0;
     int simplifying = (ss-8)->pieceCount != VALUE_NONE && (ss-8)->pieceCount - popcount(pos.pieces(pos.side_to_move())) > 4;
-    if (eval > 200 && simplifying)
+    if (!rootNode && eval > 200 && simplifying)
         return eval;
 
     // Step 11. A small Probcut idea, when we are in check

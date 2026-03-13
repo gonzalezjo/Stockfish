@@ -341,6 +341,8 @@ class Worker {
     RootMoves rootMoves;
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
+    Bitboard  relevanceMask     = 0;
+    Color     relevanceMaskSide = WHITE;
 
     size_t                    threadIdx, numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;

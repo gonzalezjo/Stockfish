@@ -150,6 +150,63 @@ bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
         && (ss - 2)->currentMove.from_sq() == (ss - 4)->currentMove.to_sq();
 }
 
+Bitboard king_neighborhood(Square sq) {
+    return sq == SQ_NONE ? 0 : square_bb(sq) | attacks_bb<KING>(sq);
+}
+
+Bitboard move_effect_mask(const Position& pos, Move move) {
+    const Square from = move.from_sq();
+    const Square to   = move.to_sq();
+
+    Bitboard mask = square_bb(from) | square_bb(to);
+
+    if (move.type_of() == EN_PASSANT)
+        mask |= square_bb(make_square(file_of(to), rank_of(from)));
+    else if (move.type_of() == CASTLING)
+    {
+        const Color  us    = pos.side_to_move();
+        const Square rfrom = to > from ? relative_square(us, SQ_H1) : relative_square(us, SQ_A1);
+        const Square rto   = to > from ? relative_square(us, SQ_F1) : relative_square(us, SQ_D1);
+        mask |= square_bb(rfrom) | square_bb(rto);
+    }
+
+    return mask;
+}
+
+Bitboard relevancy_mask(const Position& pos, Move move) {
+    const Color  us    = pos.side_to_move();
+    const Square from  = move.from_sq();
+    const Square to    = move.to_sq();
+    const Square wKing = pos.square<KING>(WHITE);
+    const Square bKing = pos.square<KING>(BLACK);
+
+    Bitboard mask = move_effect_mask(pos, move) | king_neighborhood(wKing) | king_neighborhood(bKing);
+
+    if (pos.capture_stage(move) || move.type_of() == EN_PASSANT)
+        mask |= king_neighborhood(to);
+
+    switch (type_of(pos.moved_piece(move)))
+    {
+    case PAWN :
+        mask |= attacks_bb<PAWN>(to, us);
+        break;
+    case KNIGHT :
+        mask |= attacks_bb<KNIGHT>(to);
+        break;
+    case BISHOP :
+    case ROOK :
+    case QUEEN :
+        mask |= line_bb(from, to);
+        mask |= line_bb(from, wKing) | line_bb(to, wKing);
+        mask |= line_bb(from, bKing) | line_bb(to, bKing);
+        break;
+    default :
+        break;
+    }
+
+    return mask;
+}
+
 }  // namespace
 
 Search::Worker::Worker(SharedState&                    sharedState,
@@ -999,6 +1056,7 @@ moves_loop:  // When in check, search starts here
     value = bestValue;
 
     int moveCount = 0;
+    Bitboard bestRelevanceMask = 0;
 
     // Step 13. Loop through all pseudo-legal moves until no moves remain
     // or a beta cutoff occurs.
@@ -1019,6 +1077,8 @@ moves_loop:  // When in check, search starts here
         if (rootNode && !std::count(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast, move))
             continue;
 
+        const Value alphaBeforeMove = alpha;
+
         ss->moveCount = ++moveCount;
 
         if (rootNode && is_mainthread() && nodes > 10000000)
@@ -1033,6 +1093,8 @@ moves_loop:  // When in check, search starts here
         capture    = pos.capture_stage(move);
         movedPiece = pos.moved_piece(move);
         givesCheck = pos.gives_check(move);
+        Bitboard moveRelevanceMask = !capture ? relevancy_mask(pos, move) : 0;
+        Bitboard moveEffectMask    = !capture ? move_effect_mask(pos, move) : 0;
 
         // Calculate new depth for this move
         newDepth = depth - 1;
@@ -1081,6 +1143,10 @@ moves_loop:  // When in check, search starts here
             }
             else
             {
+                if (relevanceMask && pos.side_to_move() == relevanceMaskSide
+                    && !(moveEffectMask & relevanceMask))
+                    continue;
+
                 int history = (*contHist[0])[movedPiece][move.to_sq()]
                             + (*contHist[1])[movedPiece][move.to_sq()]
                             + sharedHistory.pawn_entry(pos)[movedPiece][move.to_sq()];
@@ -1245,6 +1311,31 @@ moves_loop:  // When in check, search starts here
             // (*Scaler) Shallower searches here don't scale well
             if (value > alpha)
             {
+                bool verified = false;
+
+                if (!capture && !givesCheck && bestRelevanceMask && !(moveEffectMask & bestRelevanceMask)
+                    && value > bestValue + 25)
+                {
+                    const Bitboard savedMask = relevanceMask;
+                    const Color    savedSide = relevanceMaskSide;
+
+                    relevanceMask     = bestRelevanceMask;
+                    relevanceMaskSide = us;
+
+                    Value verifyValue =
+                      -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, std::max(d, newDepth - 1),
+                                     !cutNode);
+
+                    relevanceMask     = savedMask;
+                    relevanceMaskSide = savedSide;
+
+                    if (verifyValue > alpha)
+                    {
+                        value    = verifyValue;
+                        verified = true;
+                    }
+                }
+
                 // Adjust full-depth search based on LMR results - if the result was
                 // good enough search deeper, if it was bad enough search shallower.
                 const bool doDeeperSearch    = d < newDepth && value > bestValue + 50;
@@ -1252,7 +1343,7 @@ moves_loop:  // When in check, search starts here
 
                 newDepth += doDeeperSearch - doShallowerSearch;
 
-                if (newDepth > d)
+                if (!verified && newDepth > d)
                     value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth, !cutNode);
 
                 // Post LMR continuation history updates
@@ -1383,6 +1474,11 @@ moves_loop:  // When in check, search starts here
                 assert(depth > 0);
                 alpha = value;  // Update alpha! Always alpha < beta
             }
+        }
+
+        if (!capture && !givesCheck && value > alphaBeforeMove)
+        {
+            bestRelevanceMask = moveRelevanceMask;
         }
 
         // If the move is worse than some previously searched move,

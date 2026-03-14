@@ -1094,8 +1094,7 @@ moves_loop:  // When in check, search starts here
         capture    = pos.capture_stage(move);
         movedPiece = pos.moved_piece(move);
         givesCheck = pos.gives_check(move);
-        Bitboard moveRelevanceMask = !capture ? relevancy_mask(pos, move) : 0;
-        Bitboard moveEffectMask    = !capture ? move_effect_mask(pos, move) : 0;
+        Bitboard moveEffectMask = 0;
 
         // Calculate new depth for this move
         newDepth = depth - 1;
@@ -1144,9 +1143,12 @@ moves_loop:  // When in check, search starts here
             }
             else
             {
-                if (relevanceMask && pos.side_to_move() == relevanceMaskSide
-                    && !(moveEffectMask & relevanceMask))
-                    continue;
+                if (relevanceMask && pos.side_to_move() == relevanceMaskSide)
+                {
+                    moveEffectMask = move_effect_mask(pos, move);
+                    if (!(moveEffectMask & relevanceMask))
+                        continue;
+                }
 
                 int history = (*contHist[0])[movedPiece][move.to_sq()]
                             + (*contHist[1])[movedPiece][move.to_sq()]
@@ -1314,26 +1316,32 @@ moves_loop:  // When in check, search starts here
             {
                 bool verified = false;
 
-                if (!capture && !givesCheck && bestRelevanceMask && !(moveEffectMask & bestRelevanceMask)
+                if (!capture && !givesCheck && bestRelevanceMask
                     && bestRelevanceGain >= 36 + 6 * depth)
                 {
-                    const Bitboard savedMask = relevanceMask;
-                    const Color    savedSide = relevanceMaskSide;
+                    if (!moveEffectMask)
+                        moveEffectMask = move_effect_mask(pos, move);
 
-                    relevanceMask     = bestRelevanceMask;
-                    relevanceMaskSide = us;
-
-                    Value verifyValue =
-                      -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, std::max(d, newDepth - 1),
-                                     !cutNode);
-
-                    relevanceMask     = savedMask;
-                    relevanceMaskSide = savedSide;
-
-                    if (verifyValue > alpha)
+                    if (!(moveEffectMask & bestRelevanceMask))
                     {
-                        value    = verifyValue;
-                        verified = true;
+                        const Bitboard savedMask = relevanceMask;
+                        const Color    savedSide = relevanceMaskSide;
+
+                        relevanceMask     = bestRelevanceMask;
+                        relevanceMaskSide = us;
+
+                        Value verifyValue =
+                          -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, std::max(d, newDepth - 1),
+                                         !cutNode);
+
+                        relevanceMask     = savedMask;
+                        relevanceMaskSide = savedSide;
+
+                        if (verifyValue > alpha)
+                        {
+                            value    = verifyValue;
+                            verified = true;
+                        }
                     }
                 }
 
@@ -1479,7 +1487,7 @@ moves_loop:  // When in check, search starts here
 
         if (!capture && !givesCheck && value > alphaBeforeMove)
         {
-            bestRelevanceMask = moveRelevanceMask;
+            bestRelevanceMask = relevancy_mask(pos, move);
             bestRelevanceGain = value - alphaBeforeMove;
         }
 

@@ -1220,6 +1220,10 @@ moves_loop:  // When in check, search starts here
                           + (*contHist[0])[movedPiece][move.to_sq()]
                           + (*contHist[1])[movedPiece][move.to_sq()];
 
+        const bool dumbLmrIdea = moveCount > 2 && !capture && !givesCheck
+                              && ss->staticEval <= alpha + 55 && newDepth > 10
+                              && ss->statScore > -14551;
+
         // Decrease/increase reduction for moves with a good/bad history
         r -= ss->statScore * 454 / 4096;
 
@@ -1228,6 +1232,12 @@ moves_loop:  // When in check, search starts here
             r += r * 276 / (256 * depth + 254);
 
         // Step 17. Late moves reduction / extension (LMR)
+        if (dumbLmrIdea)
+        {
+            undo_move(pos, move);
+            continue;
+        }
+
         if (depth >= 2 && moveCount > 1)
         {
             // In general we want to cap the LMR depth search at newDepth, but when

@@ -1227,6 +1227,10 @@ moves_loop:  // When in check, search starts here
         if (allNode)
             r += r * 276 / (256 * depth + 254);
 
+        const bool shouldBeSkeptical = allNode && !capture && !givesCheck && !improving
+                                    && moveCount > 6 && newDepth >= 12 && r > 6000
+                                    && ss->staticEval <= alpha - 200;
+
         // Step 17. Late moves reduction / extension (LMR)
         if (depth >= 2 && moveCount > 1)
         {
@@ -1245,18 +1249,22 @@ moves_loop:  // When in check, search starts here
             // (*Scaler) Shallower searches here don't scale well
             if (value > alpha)
             {
-                // Adjust full-depth search based on LMR results - if the result was
-                // good enough search deeper, if it was bad enough search shallower.
-                const bool doDeeperSearch    = d < newDepth && value > bestValue + 50;
-                const bool doShallowerSearch = value < bestValue + 9;
+                if (!(shouldBeSkeptical && value <= alpha + 8))
+                {
+                    // Adjust full-depth search based on LMR results - if the result was
+                    // good enough search deeper, if it was bad enough search shallower.
+                    const bool doDeeperSearch    = d < newDepth && value > bestValue + 50;
+                    const bool doShallowerSearch = value < bestValue + 9;
 
-                newDepth += doDeeperSearch - doShallowerSearch;
+                    newDepth += doDeeperSearch - doShallowerSearch;
 
-                if (newDepth > d)
-                    value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth, !cutNode);
+                    if (newDepth > d)
+                        value =
+                          -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth, !cutNode);
 
-                // Post LMR continuation history updates
-                update_continuation_histories(ss, movedPiece, move.to_sq(), 1342);
+                    // Post LMR continuation history updates
+                    update_continuation_histories(ss, movedPiece, move.to_sq(), 1342);
+                }
             }
         }
 

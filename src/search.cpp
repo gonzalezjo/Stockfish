@@ -1220,8 +1220,15 @@ moves_loop:  // When in check, search starts here
                           + (*contHist[0])[movedPiece][move.to_sq()]
                           + (*contHist[1])[movedPiece][move.to_sq()];
 
+        const bool dumbLmrIdea = moveCount > 2 && !capture && !givesCheck
+                              && ss->staticEval <= alpha + 55 && newDepth > 10
+                              && ss->statScore > -14551;
+
         // Decrease/increase reduction for moves with a good/bad history
         r -= ss->statScore * 454 / 4096;
+
+        if (dumbLmrIdea)
+            r += 1024;
 
         // Scale up reductions for expected ALL nodes
         if (allNode)

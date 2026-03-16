@@ -1220,6 +1220,9 @@ moves_loop:  // When in check, search starts here
                           + (*contHist[0])[movedPiece][move.to_sq()]
                           + (*contHist[1])[movedPiece][move.to_sq()];
 
+        const bool dumbLmrIdea =
+          moveCount > 2 && ss->staticEval <= alpha + 55 && newDepth > 10 && ss->statScore > -14551;
+
         // Decrease/increase reduction for moves with a good/bad history
         r -= ss->statScore * 454 / 4096;
 
@@ -1236,6 +1239,9 @@ moves_loop:  // When in check, search starts here
             // To prevent problems when the max value is less than the min value,
             // std::clamp has been replaced by a more robust implementation.
             Depth d = std::max(1, std::min(newDepth - r / 1024, newDepth + 2)) + PvNode;
+
+            if (dumbLmrIdea)
+                d = std::min(d, Depth(8 + PvNode));
 
             ss->reduction = newDepth - d;
             value         = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, d, true);

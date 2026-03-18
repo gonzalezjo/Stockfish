@@ -602,6 +602,7 @@ void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
 void Search::Worker::clear() {
     mainHistory.fill(0);
     captureHistory.fill(-678);
+    probCutHistory.fill(0);
 
     // Each thread is responsible for clearing their part of shared history
     sharedHistory.correctionHistory.clear_range(0, numaThreadIdx, numaTotal);
@@ -962,6 +963,16 @@ Value Search::Worker::search(
         // probCut there
         && !(is_valid(ttData.value) && ttData.value < probCutBeta))
     {
+        auto probDepthBand = [](Depth d) { return d >= 11 ? 3 : d >= 8 ? 2 : d >= 5 ? 1 : 0; };
+        auto probGapBand = [](Value gap) { return gap >= 192 ? 3 : gap >= 96 ? 2 : gap >= 32 ? 1 : 0; };
+        int  probBias =
+          probCutHistory[improving][probDepthBand(depth)][probGapBand(ss->staticEval - beta)]
+                        [ttData.bound & BOUND_LOWER];
+        int  probPrior = 24 * (depth >= 8) + 12 * ((ss->staticEval - beta) >= 96)
+                      - 16 * !!(ttData.bound & BOUND_LOWER);
+
+        probCutBeta += probPrior + probBias / 16;
+
         assert(probCutBeta < VALUE_INFINITE && probCutBeta > beta);
 
         MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory);
@@ -979,7 +990,8 @@ Value Search::Worker::search(
             do_move(pos, move, st, ss);
 
             // Perform a preliminary qsearch to verify that the move holds
-            value = -qsearch<NonPV>(pos, ss + 1, -probCutBeta, -probCutBeta + 1);
+            Value qValue = -qsearch<NonPV>(pos, ss + 1, -probCutBeta, -probCutBeta + 1);
+            value        = qValue;
 
             // If the qsearch held, perform the regular search
             if (value >= probCutBeta && probCutDepth > 0)
@@ -987,6 +999,11 @@ Value Search::Worker::search(
                                        !cutNode);
 
             undo_move(pos, move);
+
+            probCutHistory[improving][probDepthBand(depth)][probGapBand(ss->staticEval - beta)]
+                          [ttData.bound & BOUND_LOWER]
+              << (qValue >= probCutBeta && value < probCutBeta ? 224
+                                                               : value >= probCutBeta + 96 ? -96 : 0);
 
             if (value >= probCutBeta)
             {

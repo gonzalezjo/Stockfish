@@ -292,6 +292,7 @@ class Worker {
     LowPlyHistory    lowPlyHistory;
 
     CapturePieceToHistory           captureHistory;
+    CapturePieceToHistory           qCaptureHistory;
     ContinuationHistory             continuationHistory[2][2];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
 

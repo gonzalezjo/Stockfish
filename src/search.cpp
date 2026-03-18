@@ -1648,6 +1648,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         capture    = pos.capture_stage(move);
 
         moveCount++;
+        const bool qRiskActive = ss->qRisk > 0;
+        const int  futilityMoveLimit = qRiskActive ? 1 : 2;
 
         // Step 6. Pruning
         if (!is_loss(bestValue))
@@ -1656,7 +1658,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
                 && move.type_of() != PROMOTION)
             {
-                if (moveCount > 2)
+                if (moveCount > futilityMoveLimit)
                     continue;
 
                 Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
@@ -1671,7 +1673,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
                 // If static exchange evaluation is low enough
                 // we can prune this move.
-                if (!pos.see_ge(move, alpha - futilityBase))
+                if (!pos.see_ge(move, alpha - futilityBase + 32 * qRiskActive))
                 {
                     bestValue = std::max(bestValue, std::min(alpha, futilityBase));
                     continue;
@@ -1683,14 +1685,27 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 continue;
 
             // Do not search moves with bad enough SEE values
-            if (!pos.see_ge(move, -73))
+            if (!pos.see_ge(move, -73 + 24 * qRiskActive))
                 continue;
         }
 
         // Step 7. Make and search the move
+        Value alphaBeforeMove = alpha;
+        int   savedRisk       = (ss + 1)->qRisk;
+        bool  riskyTail =
+          !ss->inCheck && !givesCheck && moveCount > 2 && move.to_sq() != prevSq
+          && move.type_of() != PROMOTION;
+
         do_move(pos, move, st, givesCheck, ss);
 
+        (ss + 1)->qRisk = std::min(2, ss->qRisk + int(riskyTail));
         value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
+        if (riskyTail && value > alphaBeforeMove)
+        {
+            (ss + 1)->qRisk = 0;
+            value           = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
+        }
+        (ss + 1)->qRisk = savedRisk;
         undo_move(pos, move);
 
         assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);

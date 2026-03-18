@@ -1635,6 +1635,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
                   contHist, &sharedHistory, ss->ply);
 
+    auto moveBand = [](int mc) { return mc >= 5 ? 3 : mc >= 4 ? 2 : mc >= 3 ? 1 : 0; };
+    auto evalBand = [](Value gap) { return gap > 256 ? 3 : gap > 96 ? 2 : gap > 0 ? 1 : 0; };
+
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
     while ((move = mp.next_move()) != Move::none())
@@ -1652,14 +1655,23 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         // Step 6. Pruning
         if (!is_loss(bestValue))
         {
+            int tailBudget =
+              qTailBudgetHistory[ss->ttHit][move.to_sq() == prevSq][moveBand(moveCount)]
+                                [evalBand(alpha - ss->staticEval)];
+            int prior = 512 * (moveCount >= 3) + 384 * (moveCount >= 4)
+                      + 256 * ((alpha - ss->staticEval) > 96) + 256 * (move.to_sq() != prevSq);
+            int tunedBudget = tailBudget + prior;
+            int moveLimit = std::max(1, 2 - (tunedBudget > 1536) - (tunedBudget > 3072));
+
             // Futility pruning and moveCount pruning
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
                 && move.type_of() != PROMOTION)
             {
-                if (moveCount > 2)
+                if (moveCount > moveLimit)
                     continue;
 
-                Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
+                Value futilityValue =
+                  futilityBase + tunedBudget / 40 + PieceValue[pos.piece_on(move.to_sq())];
 
                 // If static eval + value of piece we are going to capture is
                 // much lower than alpha, we can prune this move.
@@ -1671,7 +1683,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
                 // If static exchange evaluation is low enough
                 // we can prune this move.
-                if (!pos.see_ge(move, alpha - futilityBase))
+                if (!pos.see_ge(move, alpha - futilityBase + tunedBudget / 56))
                 {
                     bestValue = std::max(bestValue, std::min(alpha, futilityBase));
                     continue;
@@ -1683,17 +1695,22 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 continue;
 
             // Do not search moves with bad enough SEE values
-            if (!pos.see_ge(move, -73))
+            if (!pos.see_ge(move, -73 + tunedBudget / 96))
                 continue;
         }
 
         // Step 7. Make and search the move
+        Value alphaBeforeMove = alpha;
         do_move(pos, move, st, givesCheck, ss);
 
         value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
         undo_move(pos, move);
 
         assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);
+
+        qTailBudgetHistory[ss->ttHit][move.to_sq() == prevSq][moveBand(moveCount)]
+                          [evalBand(alphaBeforeMove - ss->staticEval)]
+          << (value > alphaBeforeMove ? -1280 : 640);
 
         // Step 8. Check for a new best move
         if (value > bestValue)

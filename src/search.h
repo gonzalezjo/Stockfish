@@ -292,6 +292,7 @@ class Worker {
     LowPlyHistory    lowPlyHistory;
 
     CapturePieceToHistory           captureHistory;
+    Stats<std::int16_t, 8192, 2, 2, 4, 4> qTailBudgetHistory;
     ContinuationHistory             continuationHistory[2][2];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
 

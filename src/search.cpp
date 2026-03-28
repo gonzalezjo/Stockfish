@@ -769,12 +769,14 @@ void Search::Worker::clear_upcoming_transposition_qsearch() {
     upcomingTranspositionQsearchNext = 0;
 }
 
-Value Search::Worker::probe_upcoming_transposition_qsearch(Position& pos, Stack* ss, Value beta) {
+Value Search::Worker::probe_upcoming_transposition_qsearch(
+  Position& pos, Stack* ss, Value beta, Move* witnessMove) {
 
     const Key      currentPieceKey  = pos.pawn_key() ^ pos.non_pawn_key(WHITE) ^ pos.non_pawn_key(BLACK);
     const uint32_t currentSignature = qsearch_signature(currentPieceKey);
     const Color    childSide        = ~pos.side_to_move();
     Value          bestLowerBound   = VALUE_NONE;
+    Move           bestWitnessMove  = Move::none();
     const auto&    joinIndex        = upcoming_transposition_qsearch_join_index();
     const auto&    bucketOffsets    = joinIndex.bucketOffsets;
     const auto&    groups           = joinIndex.groups;
@@ -844,14 +846,24 @@ Value Search::Worker::probe_upcoming_transposition_qsearch(Position& pos, Stack*
 
                     Value lowerBound = -value_from_tt(record.childValue, ss->ply + 1, record.rule50);
                     if (!is_valid(bestLowerBound) || lowerBound > bestLowerBound)
+                    {
                         bestLowerBound = lowerBound;
+                        bestWitnessMove = desc.move;
+                    }
 
                     if (lowerBound >= beta)
+                    {
+                        if (witnessMove)
+                            *witnessMove = bestWitnessMove;
                         return lowerBound;
+                    }
                 }
             }
         }
     }
+
+    if (witnessMove)
+        *witnessMove = bestWitnessMove;
 
     return bestLowerBound;
 }
@@ -1891,16 +1903,10 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
+    Value probeLowerBound = VALUE_NONE;
+    Move  probeWitnessMove = Move::none();
     if (!PvNode)
-    {
-        if (Value lowerBound = probe_upcoming_transposition_qsearch(pos, ss, beta);
-            is_valid(lowerBound) && lowerBound > alpha)
-        {
-            alpha = lowerBound;
-            if (alpha >= beta)
-                return alpha;
-        }
-    }
+        probeLowerBound = probe_upcoming_transposition_qsearch(pos, ss, beta, &probeWitnessMove);
 
     // Step 3. Transposition table lookup
     posKey                         = pos.key();
@@ -1974,6 +1980,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // Initialize a MovePicker object for the current position, and prepare to search
     // the moves. We presently use two stages of move generator in quiescence search:
     // captures, or evasions only when in check.
+    if (probeWitnessMove.is_ok())
+        ttData.move = probeWitnessMove;
+
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
                   contHist, &sharedHistory, ss->ply);
 
@@ -1992,7 +2001,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         moveCount++;
 
         // Step 6. Pruning
-        if (!is_loss(bestValue))
+        if (!is_loss(bestValue) && move != probeWitnessMove)
         {
             // Futility pruning and moveCount pruning
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
@@ -2037,9 +2046,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
 
         if (!PvNode)
-        {
             remember_upcoming_transposition_qsearch(pos, ss->ply + 1, value, searchAlpha, searchBeta);
-        }
 
         undo_move(pos, move);
 
@@ -2064,6 +2071,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             }
         }
     }
+
+    if (is_valid(probeLowerBound) && probeLowerBound > bestValue)
+        bestValue = probeLowerBound;
 
     // Step 9. Check for mate
     // All legal moves have been searched. A special case: if we are

@@ -309,7 +309,8 @@ class Worker {
     void undo_move(Position& pos, const Move move);
     void undo_null_move(Position& pos);
     void clear_upcoming_transposition_qsearch();
-    Value probe_upcoming_transposition_qsearch(Position& pos, Stack* ss, Value beta);
+    Value probe_upcoming_transposition_qsearch(
+      Position& pos, Stack* ss, Value beta, Move* witnessMove = nullptr);
     void remember_upcoming_transposition_qsearch(
       const Position& pos, int childPly, Value parentValue, Value parentAlpha, Value parentBeta);
 

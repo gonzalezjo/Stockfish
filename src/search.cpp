@@ -31,6 +31,7 @@
 #include <list>
 #include <ratio>
 #include <string>
+#include <unordered_map>  // TODO: simplify if promising
 #include <utility>
 
 #include "bitboard.h"
@@ -54,6 +55,10 @@ namespace Stockfish {
 
 namespace TB = Tablebases;
 
+namespace Zobrist {
+extern Key psq[PIECE_NB][SQUARE_NB];
+}
+
 void syzygy_extend_pv(const OptionsMap&            options,
                       const Search::LimitsType&    limits,
                       Stockfish::Position&         pos,
@@ -66,6 +71,153 @@ namespace {
 
 constexpr int SEARCHEDLIST_CAPACITY = 32;
 using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
+
+struct UpcomingTranspositionQsearchDesc {
+    Move   move;
+    Piece  movedPiece;
+    Piece  capturedPiece;
+    Square capturedSquare;
+};
+
+struct UpcomingTranspositionQsearchGroup {
+    Key                              deltaPiece;
+    std::vector<UpcomingTranspositionQsearchDesc> descs;
+};
+
+constexpr size_t UpcomingTranspositionQsearchSignatureSpace = 1u << 20;
+
+using UpcomingTranspositionQsearchExactIndex =
+  std::unordered_map<Key, std::vector<UpcomingTranspositionQsearchDesc>>;
+using UpcomingTranspositionQsearchGroups = std::vector<UpcomingTranspositionQsearchGroup>;
+
+struct UpcomingTranspositionQsearchJoinIndex {
+    std::array<uint32_t, UpcomingTranspositionQsearchSignatureSpace + 1> bucketOffsets = {};
+    UpcomingTranspositionQsearchGroups                                   groups;
+};
+
+inline uint32_t qsearch_signature(Key key) {
+    key ^= key >> 32;
+    key ^= key >> 16;
+    key ^= key >> 8;
+    return uint32_t(key) & (UpcomingTranspositionQsearchSignatureSpace - 1);
+}
+
+void add_upcoming_transposition_qsearch_desc(UpcomingTranspositionQsearchExactIndex& index,
+                                             Key                              delta,
+                                             Move                             move,
+                                             Piece                            movedPiece,
+                                             Piece                            capturedPiece = NO_PIECE,
+                                             Square                           capturedSquare = SQ_NONE) {
+    index[delta].push_back({move, movedPiece, capturedPiece, capturedSquare});
+}
+
+UpcomingTranspositionQsearchJoinIndex build_upcoming_transposition_qsearch_index() {
+
+    UpcomingTranspositionQsearchJoinIndex joinIndex;
+    UpcomingTranspositionQsearchExactIndex exactIndex;
+    exactIndex.reserve(4096);
+
+    auto add_capture_desc = [&](Piece mover, Square from, Square to, Piece captured, Move move) {
+        Key delta = Zobrist::psq[mover][from] ^ Zobrist::psq[mover][to] ^ Zobrist::psq[captured][to];
+        add_upcoming_transposition_qsearch_desc(exactIndex, delta, move, mover, captured, to);
+    };
+
+    for (Color us : {WHITE, BLACK})
+    {
+        Piece pawn = make_piece(us, PAWN);
+
+        for (Square from = SQ_A1; from <= SQ_H8; ++from)
+        {
+            Rank fromRank = relative_rank(us, from);
+
+            if (fromRank == RANK_7)
+            {
+                Square to = from + pawn_push(us);
+                if (is_ok(to))
+                {
+                    Key delta = Zobrist::psq[pawn][from]
+                              ^ Zobrist::psq[make_piece(us, QUEEN)][to];
+                    add_upcoming_transposition_qsearch_desc(
+                      exactIndex, delta, Move::make<PROMOTION>(from, to, QUEEN), pawn);
+                }
+            }
+
+            Bitboard pawnCaptures = attacks_bb<PAWN>(from, us);
+            while (pawnCaptures)
+            {
+                Square to = pop_lsb(pawnCaptures);
+
+                if (fromRank == RANK_7)
+                {
+                    for (PieceType capturedType = PAWN; capturedType <= QUEEN; ++capturedType)
+                    {
+                        Piece captured = make_piece(~us, capturedType);
+                        Key   delta =
+                          Zobrist::psq[pawn][from] ^ Zobrist::psq[make_piece(us, QUEEN)][to]
+                          ^ Zobrist::psq[captured][to];
+                        add_upcoming_transposition_qsearch_desc(
+                          exactIndex, delta, Move::make<PROMOTION>(from, to, QUEEN), pawn, captured, to);
+                    }
+                }
+                else
+                {
+                    for (PieceType capturedType = PAWN; capturedType <= QUEEN; ++capturedType)
+                        add_capture_desc(pawn, from, to, make_piece(~us, capturedType), Move(from, to));
+
+                    Square captureSquare = to - pawn_push(us);
+                    Key delta = Zobrist::psq[pawn][from] ^ Zobrist::psq[pawn][to]
+                              ^ Zobrist::psq[make_piece(~us, PAWN)][captureSquare];
+                    add_upcoming_transposition_qsearch_desc(exactIndex, delta,
+                                                            Move::make<EN_PASSANT>(from, to), pawn,
+                                                            make_piece(~us, PAWN), captureSquare);
+                }
+            }
+        }
+
+        for (PieceType pt = KNIGHT; pt <= KING; ++pt)
+        {
+            Piece mover = make_piece(us, pt);
+
+            for (Square from = SQ_A1; from <= SQ_H8; ++from)
+            {
+                Bitboard attacks = attacks_bb(pt, from, 0);
+                while (attacks)
+                {
+                    Square to = pop_lsb(attacks);
+                    Move   move(from, to);
+
+                    for (PieceType capturedType = PAWN; capturedType <= QUEEN; ++capturedType)
+                        add_capture_desc(mover, from, to, make_piece(~us, capturedType), move);
+                }
+            }
+        }
+    }
+
+    auto& groups = joinIndex.groups;
+    groups.reserve(exactIndex.size());
+    for (auto& [delta, descs] : exactIndex)
+        groups.push_back({delta, std::move(descs)});
+
+    std::sort(groups.begin(), groups.end(), [](const auto& a, const auto& b) {
+        const uint32_t sa = qsearch_signature(a.deltaPiece);
+        const uint32_t sb = qsearch_signature(b.deltaPiece);
+        return sa != sb ? sa < sb : a.deltaPiece < b.deltaPiece;
+    });
+
+    for (const auto& group : groups)
+        joinIndex.bucketOffsets[qsearch_signature(group.deltaPiece) + 1]++;
+
+    for (size_t i = 1; i < joinIndex.bucketOffsets.size(); ++i)
+        joinIndex.bucketOffsets[i] += joinIndex.bucketOffsets[i - 1];
+
+    return joinIndex;
+}
+
+const UpcomingTranspositionQsearchJoinIndex& upcoming_transposition_qsearch_join_index() {
+    static const UpcomingTranspositionQsearchJoinIndex index =
+      build_upcoming_transposition_qsearch_index();
+    return index;
+}
 
 // (*Scalers):
 // The values with Scaler asterisks have proven non-linear scaling.
@@ -183,6 +335,7 @@ void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
     lastIterationPV.clear();
+    clear_upcoming_transposition_qsearch();
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -597,6 +750,183 @@ void Search::Worker::undo_move(Position& pos, const Move move) {
 
 void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
 
+void Search::Worker::clear_upcoming_transposition_qsearch() {
+    for (auto& record : upcomingTranspositionQsearchHotSet)
+        record = UpcomingTranspositionRecord{};
+
+    for (auto& map : upcomingTranspositionQsearchPieceKeySlots)
+    {
+        map.clear();
+        map.reserve(128);
+    }
+
+    for (Color side : {WHITE, BLACK})
+    {
+        upcomingTranspositionQsearchSignatureCounts[side].fill(0);
+        upcomingTranspositionQsearchSignatureListSize[side] = 0;
+    }
+
+    upcomingTranspositionQsearchNext = 0;
+}
+
+Value Search::Worker::probe_upcoming_transposition_qsearch(Position& pos, Stack* ss, Value beta) {
+
+    const Key      currentPieceKey  = pos.pawn_key() ^ pos.non_pawn_key(WHITE) ^ pos.non_pawn_key(BLACK);
+    const uint32_t currentSignature = qsearch_signature(currentPieceKey);
+    const Color    childSide        = ~pos.side_to_move();
+    Value          bestLowerBound   = VALUE_NONE;
+    const auto&    joinIndex        = upcoming_transposition_qsearch_join_index();
+    const auto&    bucketOffsets    = joinIndex.bucketOffsets;
+    const auto&    groups           = joinIndex.groups;
+    const auto&    signatureList    = upcomingTranspositionQsearchSignatureList[childSide];
+    const size_t   signatureSize    = upcomingTranspositionQsearchSignatureListSize[childSide];
+
+    for (size_t i = 0; i < signatureSize; ++i)
+    {
+        const uint32_t certSignature = signatureList[i];
+        const uint32_t deltaSignature = currentSignature ^ certSignature;
+
+        for (uint32_t g = bucketOffsets[deltaSignature]; g < bucketOffsets[deltaSignature + 1]; ++g)
+        {
+            const auto& group          = groups[g];
+            const Key   targetPieceKey = currentPieceKey ^ group.deltaPiece;
+            auto&       pieceKeySlots  = upcomingTranspositionQsearchPieceKeySlots[childSide];
+            auto        it             = pieceKeySlots.find(targetPieceKey);
+
+            if (it == pieceKeySlots.end())
+                continue;
+
+            uint64_t slotMask = it->second;
+            while (slotMask)
+            {
+                const int slot = pop_lsb(slotMask);
+                const auto& record = upcomingTranspositionQsearchHotSet[slot];
+
+                if (!record.valid || record.sideToMove != childSide || record.pieceKey != targetPieceKey)
+                    continue;
+
+                for (const auto& desc : group.descs)
+                {
+                    if (pos.piece_on(desc.move.from_sq()) != desc.movedPiece)
+                        continue;
+
+                    if (desc.move.type_of() == EN_PASSANT)
+                    {
+                        if (pos.ep_square() != desc.move.to_sq()
+                            || pos.piece_on(desc.capturedSquare) != desc.capturedPiece
+                            || !pos.empty(desc.move.to_sq()))
+                            continue;
+                    }
+                    else
+                    {
+                        Piece target = pos.piece_on(desc.move.to_sq());
+
+                        if (desc.capturedPiece == NO_PIECE ? target != NO_PIECE : target != desc.capturedPiece)
+                            continue;
+                    }
+
+                    if (!pos.pseudo_legal(desc.move) || !pos.legal(desc.move))
+                        continue;
+
+                    StateInfo st;
+                    pos.do_move(desc.move, st);
+
+                    bool sameState = pos.rule50_count() == record.rule50 && pos.key() == record.positionKey
+                                  && pos.side_to_move() == record.sideToMove
+                                  && pos.state()->castlingRights == record.castlingRights
+                                  && pos.ep_square() == record.epSquare
+                                  && pos.piece_array() == record.board;
+
+                    pos.undo_move(desc.move);
+
+                    if (!sameState)
+                        continue;
+
+                    Value lowerBound = -value_from_tt(record.childValue, ss->ply + 1, record.rule50);
+                    if (!is_valid(bestLowerBound) || lowerBound > bestLowerBound)
+                        bestLowerBound = lowerBound;
+
+                    if (lowerBound >= beta)
+                        return lowerBound;
+                }
+            }
+        }
+    }
+
+    return bestLowerBound;
+}
+
+void Search::Worker::remember_upcoming_transposition_qsearch(
+  const Position& pos, int childPly, Value parentValue, Value parentAlpha, Value parentBeta) {
+
+    if (pos.rule50_count() != 0)
+        return;
+
+    Bound childBound = parentValue >= parentBeta ? BOUND_UPPER
+                     : parentValue <= parentAlpha ? BOUND_LOWER
+                                                 : BOUND_EXACT;
+
+    if (!(childBound & (BOUND_UPPER | BOUND_EXACT)))
+        return;
+
+    const size_t slot = upcomingTranspositionQsearchNext;
+    auto& record = upcomingTranspositionQsearchHotSet[slot];
+
+    if (record.valid)
+    {
+        const Color oldSide = record.sideToMove;
+        const uint32_t oldSignature = qsearch_signature(record.pieceKey);
+
+        auto& oldSlots = upcomingTranspositionQsearchPieceKeySlots[oldSide];
+        auto  it       = oldSlots.find(record.pieceKey);
+        if (it != oldSlots.end())
+        {
+            it->second &= ~(uint64_t(1) << slot);
+            if (it->second == 0)
+                oldSlots.erase(it);
+        }
+
+        auto& oldSignatureCounts = upcomingTranspositionQsearchSignatureCounts[oldSide];
+        if (--oldSignatureCounts[oldSignature] == 0)
+        {
+            auto& oldSignatureList     = upcomingTranspositionQsearchSignatureList[oldSide];
+            auto& oldSignatureListSize = upcomingTranspositionQsearchSignatureListSize[oldSide];
+            for (size_t i = 0; i < oldSignatureListSize; ++i)
+            {
+                if (oldSignatureList[i] == oldSignature)
+                {
+                    oldSignatureList[i] = oldSignatureList[--oldSignatureListSize];
+                    break;
+                }
+            }
+        }
+    }
+
+    upcomingTranspositionQsearchNext =
+      (upcomingTranspositionQsearchNext + 1) % UpcomingTranspositionQsearchHotSetSize;
+
+    record.valid          = true;
+    record.board          = pos.piece_array();
+    record.pieceKey       = pos.pawn_key() ^ pos.non_pawn_key(WHITE) ^ pos.non_pawn_key(BLACK);
+    record.positionKey    = pos.key();
+    record.childValue     = value_to_tt(-parentValue, childPly);
+    record.epSquare       = pos.ep_square();
+    record.castlingRights = pos.state()->castlingRights;
+    record.rule50         = pos.rule50_count();
+    record.bound          = childBound;
+    record.sideToMove     = pos.side_to_move();
+
+    const Color side = record.sideToMove;
+    const uint32_t signature = qsearch_signature(record.pieceKey);
+
+    auto& signatureCounts = upcomingTranspositionQsearchSignatureCounts[side];
+    if (signatureCounts[signature]++ == 0)
+        upcomingTranspositionQsearchSignatureList[side][upcomingTranspositionQsearchSignatureListSize[side]++] =
+          signature;
+
+    upcomingTranspositionQsearchPieceKeySlots[side][record.pieceKey] |= uint64_t(1) << slot;
+}
+
 
 // Reset histories, usually before a new game
 void Search::Worker::clear() {
@@ -623,6 +953,7 @@ void Search::Worker::clear() {
         reductions[i] = int(2763 / 128.0 * std::log(i));
 
     refreshTable.clear(networks[numaAccessToken]);
+    clear_upcoming_transposition_qsearch();
 }
 
 
@@ -1560,6 +1891,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
+    if (Value lowerBound = probe_upcoming_transposition_qsearch(pos, ss, beta);
+        is_valid(lowerBound) && lowerBound > alpha)
+    {
+        alpha = lowerBound;
+        if (alpha >= beta)
+            return alpha;
+    }
+
     // Step 3. Transposition table lookup
     posKey                         = pos.key();
     auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
@@ -1688,9 +2027,16 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         }
 
         // Step 7. Make and search the move
+        Value searchAlpha = alpha;
+        Value searchBeta  = beta;
         do_move(pos, move, st, givesCheck, ss);
 
         value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
+
+        if (!threads.stop.load(std::memory_order_relaxed))
+            remember_upcoming_transposition_qsearch(pos, ss->ply + 1, value, searchAlpha,
+                                                    searchBeta);
+
         undo_move(pos, move);
 
         assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);

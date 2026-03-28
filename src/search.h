@@ -28,6 +28,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <unordered_map>  // TODO: simplify if promising
 #include <string>
 #include <string_view>
 #include <vector>
@@ -307,6 +308,10 @@ class Worker {
     void do_null_move(Position& pos, StateInfo& st, Stack* const ss);
     void undo_move(Position& pos, const Move move);
     void undo_null_move(Position& pos);
+    void clear_upcoming_transposition_qsearch();
+    Value probe_upcoming_transposition_qsearch(Position& pos, Stack* ss, Value beta);
+    void remember_upcoming_transposition_qsearch(
+      const Position& pos, int childPly, Value parentValue, Value parentAlpha, Value parentBeta);
 
     // This is the main search function, for both PV and non-PV nodes
     template<NodeType nodeType>
@@ -317,6 +322,19 @@ class Worker {
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
 
     Depth reduction(bool i, Depth d, int mn, int delta) const;
+
+    struct UpcomingTranspositionRecord {
+        std::array<Piece, SQUARE_NB> board = {};
+        Key                          pieceKey = 0;
+        Key                          positionKey = 0;
+        Value                        childValue = VALUE_NONE;
+        Square                       epSquare = SQ_NONE;
+        int                          castlingRights = NO_CASTLING;
+        int                          rule50 = 0;
+        Bound                        bound = BOUND_NONE;
+        Color                        sideToMove = WHITE;
+        bool                         valid = false;
+    };
 
     // Pointer to the search manager, only allowed to be called by the main thread
     SearchManager* main_manager() const {
@@ -364,6 +382,17 @@ class Worker {
     // Used by NNUE
     Eval::NNUE::AccumulatorStack  accumulatorStack;
     Eval::NNUE::AccumulatorCaches refreshTable;
+    static constexpr size_t UpcomingTranspositionQsearchHotSetSize = 64;
+    static constexpr size_t UpcomingTranspositionQsearchSignatureSpace = 1u << 20;
+    std::array<UpcomingTranspositionRecord, UpcomingTranspositionQsearchHotSetSize>
+      upcomingTranspositionQsearchHotSet;
+    std::array<std::unordered_map<Key, uint64_t>, COLOR_NB> upcomingTranspositionQsearchPieceKeySlots;
+    std::array<std::array<uint8_t, UpcomingTranspositionQsearchSignatureSpace>, COLOR_NB>
+      upcomingTranspositionQsearchSignatureCounts = {};
+    std::array<std::array<uint32_t, UpcomingTranspositionQsearchHotSetSize>, COLOR_NB>
+      upcomingTranspositionQsearchSignatureList = {};
+    std::array<size_t, COLOR_NB> upcomingTranspositionQsearchSignatureListSize = {};
+    size_t upcomingTranspositionQsearchNext = 0;
 
     friend class Stockfish::ThreadPool;
     friend class SearchManager;
